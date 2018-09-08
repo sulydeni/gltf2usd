@@ -4,6 +4,10 @@ import os
 import struct
 import base64
 
+import gltf2usdUtils
+
+from gltf2 import Skin, Node, Animation
+
 class AccessorType(Enum):
     SCALAR = 'SCALAR'
     VEC2 = 'VEC2'
@@ -78,6 +82,8 @@ def accessor_component_type_bytesize(x):
     }[x]
 
 
+
+
 class GLTF2Loader:
     """A very simple glTF loader.  It is essentially a utility to load data from accessors
     """
@@ -97,6 +103,56 @@ class GLTF2Loader:
         self.root_dir = os.path.dirname(gltf_file)
         with open(gltf_file) as f:
             self.json_data = json.load(f)
+        if os.path.isfile(gltf_file) and gltf_file.endswith('.gltf'):
+            self.root_dir = os.path.dirname(gltf_file)
+            with open(gltf_file) as f:
+                self.json_data = json.load(f)
+                self._initialize()
+        else:
+            raise Exception('Can only accept .gltf files')
+
+    def _initialize(self):
+        """Initializes the glTF loader
+        """
+
+        self._initialize_nodes()
+        self._initialize_skins()
+        self._initialize_animations()
+
+    def _initialize_nodes(self):
+        self.nodes = []
+        if 'nodes' in self.json_data:
+            for i, node_entry in enumerate(self.json_data['nodes']):
+                node = Node(node_entry, i)
+                self.nodes.append(node)
+
+            for i, node_entry in enumerate(self.json_data['nodes']):
+                if 'children' in node_entry:
+                    parent = self.nodes[i]
+                    for child_index in node_entry['children']:
+                        child = self.nodes[child_index]
+                        child._parent = parent
+                        parent._children.append(child)
+
+    def _initialize_animations(self):
+        self.animations = []
+        if 'animations' in self.json_data:
+            for i, animation_entry in enumerate(self.json_data['animations']):
+                animation = Animation(animation_entry, i, self)
+                self.animations.append(animation)
+
+
+    def _initialize_skins(self):
+        self.skins = [Skin(self, skin) for skin in self.json_data['skins']]
+
+    def get_nodes(self):
+        return self.nodes
+
+    def get_skins(self):
+        return self.skins
+
+    def get_animations(self):
+        return self.animations
 
 
     def align(self, value, size):
