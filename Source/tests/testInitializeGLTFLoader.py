@@ -18,6 +18,26 @@ class TestInitializeGLTFLoader(unittest.TestCase):
         for node in nodes:
             print(node.get_parent())
 
+    def test_get_scenes(self):
+        scenes = self.loader.get_scenes()
+
+    def test_get_main_scene(self):
+        main_scene = self.loader.get_main_scene()
+
+    def test_get_nodes_from_scene(self):
+        main_scene = self.loader.get_main_scene()
+        nodes = main_scene.get_nodes()
+
+    def test_get_mesh(self):
+        node = [node for node in self.loader.get_nodes() if node.get_mesh() != None][0]
+        mesh = node.get_mesh()
+
+    def test_get_mesh_primitive(self):
+        node = [node for node in self.loader.get_nodes() if node.get_mesh() != None][0]
+        mesh = node.get_mesh()
+        primitive = mesh.get_primitives()
+        
+
     def test_get_skins(self):
         skins = self.loader.get_skins()
         for skin in skins:

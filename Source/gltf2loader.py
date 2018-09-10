@@ -6,7 +6,7 @@ import base64
 
 import gltf2usdUtils
 
-from gltf2 import Skin, Node, Animation
+from gltf2 import Skin, Node, Animation, Scene, Mesh, Material
 
 class AccessorType(Enum):
     SCALAR = 'SCALAR'
@@ -114,8 +114,10 @@ class GLTF2Loader:
     def _initialize(self):
         """Initializes the glTF loader
         """
-
+        self._initialize_materials()
+        self._initialize_meshes()
         self._initialize_nodes()
+        self._initialize_scenes()
         self._initialize_skins()
         self._initialize_animations()
 
@@ -123,7 +125,7 @@ class GLTF2Loader:
         self.nodes = []
         if 'nodes' in self.json_data:
             for i, node_entry in enumerate(self.json_data['nodes']):
-                node = Node(node_entry, i)
+                node = Node(node_entry, i, self)
                 self.nodes.append(node)
 
             for i, node_entry in enumerate(self.json_data['nodes']):
@@ -133,6 +135,60 @@ class GLTF2Loader:
                         child = self.nodes[child_index]
                         child._parent = parent
                         parent._children.append(child)
+
+    def _initialize_materials(self):
+        self._materials = []
+
+        if 'materials' in self.json_data:
+            for i, material_entry in enumerate(self.json_data['materials']):
+                material = Material(material_entry, i, self)
+                self._materials.append(material)
+
+    def _initialize_scenes(self):
+        self._scenes = []
+        self._main_scene = None
+        if 'scenes' in self.json_data:
+            for i, scene_entry in enumerate(self.json_data['scenes']):
+                scene = Scene(scene_entry, i, self.nodes)
+                self._scenes.append(scene)
+
+            if 'scene' in self.json_data:
+                self._main_scene = self._scenes[self.json_data['scene']]
+            else:
+                self._main_scene = self._scenes[0]
+
+    def get_scenes(self):
+        """Get the scene objects from the glTF file
+        
+        Returns:
+            Scene[] -- glTF scene objects
+        """
+
+        return self._scenes
+
+    def get_main_scene(self):
+        """Returns the main scene in the glTF file, or none if there are no scenes
+        
+        Returns:
+            Scene -- glTF scene
+        """
+
+        return self._main_scene
+
+    def get_materials(self):
+        return self._materials
+
+    def get_meshes(self):
+        return self._meshes
+
+    def _initialize_meshes(self):
+        self._meshes = []
+        if 'meshes' in self.json_data:
+            for i, mesh_entry in enumerate(self.json_data['meshes']):
+                mesh = Mesh(mesh_entry, i, self)
+                self._meshes.append(mesh)
+
+
 
     def _initialize_animations(self):
         self.animations = []
