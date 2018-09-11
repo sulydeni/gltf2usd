@@ -1050,7 +1050,7 @@ def convert_to_usd(gltf_file, usd_file, fps, scale, arkit=False, verbose=False):
             success = check_usd_compliance(resolvedAsset, arkit=args.arkit)
             with Ar.ResolverContextBinder(context):
                 if arkit and not success:
-                    print('USD is not ARKit compliant')
+                    usd.logger.warning('USD is not ARKit compliant')
                     return
 
                 success = UsdUtils.CreateNewUsdzPackage(usdc_file, usd_file) and success
@@ -1060,7 +1060,7 @@ def convert_to_usd(gltf_file, usd_file, fps, scale, arkit=False, verbose=False):
                     zip_file = Usd.ZipFile.Open(usd_file)
                     file_names = zip_file.GetFileNames()
                     for file_name in file_names:
-                        print('\t{}'.format(file_name))
+                        usd.logger.info('\t{}'.format(file_name))
                 else:
                     usd.logger.error('could not create {}'.format(usd_file))
 
