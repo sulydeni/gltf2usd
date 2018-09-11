@@ -16,8 +16,8 @@ class AnimationSampler:
         self._input_min = self._input_accessor['min']
         self._input_max = self._input_accessor['max']
         self._output_count = self._output_accessor['count']
-        self._output_min = self._output_accessor['min']
-        self._output_max = self._output_accessor['max']
+        self._output_min = self._output_accessor['min'] if ('min' in self._output_accessor) else None
+        self._output_max = self._output_accessor['max'] if ('max' in self._output_accessor) else None
         self._input_data = None
         self._output_data = None
 
