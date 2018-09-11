@@ -117,8 +117,9 @@ class GLTF2Loader:
         self._initialize_materials()
         self._initialize_meshes()
         self._initialize_nodes()
-        self._initialize_scenes()
         self._initialize_skins()
+        self._initialize_scenes()
+        
         self._initialize_animations()
 
     def _initialize_nodes(self):
@@ -200,6 +201,9 @@ class GLTF2Loader:
 
     def _initialize_skins(self):
         self.skins = [Skin(self, skin) for skin in self.json_data['skins']]
+        for node in self.nodes:
+            if node._skin_index != None:
+                node._skin = self.skins[node._skin_index]
 
     def get_nodes(self):
         return self.nodes

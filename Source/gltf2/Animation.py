@@ -6,13 +6,42 @@ from pxr import Gf
 
 class AnimationSampler:
     def __init__(self, sampler_entry, animation):
-        self._input_accessor_index = sampler_entry['input']
-        self._interpolation = sampler_entry['interpolation']
-        self._output_accessor_index = sampler_entry['output']
         self._animation = animation
+        self._input_accessor_index = sampler_entry['input']
+        self._input_accessor = self._animation._gltf_loader.json_data['accessors'][self._input_accessor_index]
+        self._interpolation = sampler_entry['interpolation'] if ('interpolation' in sampler_entry) else 'LINEAR'
+        self._output_accessor_index = sampler_entry['output']
+        self._output_accessor = self._animation._gltf_loader.json_data['accessors'][self._output_accessor_index]
+        self._input_count = self._input_accessor['count']
+        self._input_min = self._input_accessor['min']
+        self._input_max = self._input_accessor['max']
+        self._output_count = self._output_accessor['count']
+        self._output_min = self._output_accessor['min']
+        self._output_max = self._output_accessor['max']
         self._input_data = None
         self._output_data = None
 
+        self._input_data = None
+        self._output_data = None
+
+    def get_input_count(self):
+        return self._input_count
+
+    def get_input_min(self):
+        return self._input_min
+
+    def get_input_max(self):
+        return self._input_max
+
+    def get_output_count(self):
+        return self._output_count
+
+    def get_output_min(self):
+        return self._output_min
+
+    def get_output_max(self):
+        return self._output_max
+        
     def get_input_data(self):
         if not self._input_data:
             accessor = self._animation._gltf_loader.json_data['accessors'][self._input_accessor_index]
@@ -26,6 +55,7 @@ class AnimationSampler:
             self._output_data = self._animation._gltf_loader.get_data(accessor)
         
         return self._output_data
+        
 
     def get_interpolated_output_data(self, input_sample):
         input_data = self.get_input_data()
@@ -97,10 +127,11 @@ class AnimationChannel:
 
 class Animation:
     def __init__(self, animation_entry, index, gltf_loader):
+        self._gltf_loader = gltf_loader
         self._name = animation_entry['name'] if ('name' in animation_entry) else 'animation_{}'.format(index)
         self._samplers = [AnimationSampler(sampler, self) for sampler in animation_entry['samplers']]
         self._channels = [AnimationChannel(channel, self) for channel in animation_entry['channels']]
-        self._gltf_loader = gltf_loader
+        
 
     def get_animation_channel_for_node_and_path(self, node, path):
         for channel in self._channels:

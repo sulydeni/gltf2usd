@@ -196,6 +196,8 @@ class GLTF2USD:
         if mesh != None:
             usd_mesh = self._convert_mesh_to_xform_new(mesh, xformPrim, node)
 
+        self._convert_animation_to_usd_new(node, xformPrim)
+        
         children = node.get_children()
 
         for child in children:
@@ -528,8 +530,14 @@ class GLTF2USD:
             node_index {int} -- glTF node index
             double_sided {bool} -- specifies if the primitive is double sided
         """
-        parent_path = usd_node.GetPath()
-        mesh = UsdGeom.Mesh.Define(self.stage, '{0}/{1}'.format(usd_node.GetPath(), gltf_primitive.get_name()))
+        parent_node = usd_node
+        attributes = gltf_primitive.get_attributes()
+        skel_root = None
+        if 'JOINTS_0' in attributes:
+            skeleton_path = '{0}/{1}'.format(usd_node.GetPath(),  'skeleton_root')
+            skel_root = UsdSkel.Root.Define(self.stage, skeleton_path)
+            parent_node = skel_root
+        mesh = UsdGeom.Mesh.Define(self.stage, '{0}/{1}'.format(parent_node.GetPath(), GLTF2USDUtils.convert_to_usd_friendly_node_name(gltf_primitive.get_name())))
         mesh.CreateSubdivisionSchemeAttr().Set('none')
 
         material = gltf_primitive.get_material()
@@ -540,7 +548,6 @@ class GLTF2USD:
             usd_material = self.usd_materials[material.get_index()]
             UsdShade.MaterialBindingAPI(mesh).Bind(usd_material)
 
-        attributes = gltf_primitive.get_attributes()
         for attribute_name in attributes:
             attribute = attributes[attribute_name]
             if attribute_name == 'POSITION':
@@ -548,14 +555,14 @@ class GLTF2USD:
                 override_prim.CreateAttribute('extent', Sdf.ValueTypeNames.Float3Array).Set([attribute.get_min_value(), attribute.get_max_value()])
                 mesh.CreatePointsAttr(attribute.get_data())
 
-            if attribute == 'NORMAL':
+            if attribute_name == 'NORMAL':
                 mesh.CreateNormalsAttr(attribute.get_data())
 
-            if attribute == 'COLOR_0':
+            if attribute_name == 'COLOR_0':
                 prim_var = UsdGeom.PrimvarsAPI(mesh)
                 colors = prim_var.CreatePrimvar('displayColor', Sdf.ValueTypeNames.Color3f, 'vertex').Set(attribute.get_data())
 
-            if attribute == 'TEXCOORD_0':
+            if attribute_name == 'TEXCOORD_0':
                 data = attribute.get_data()
                 invert_uvs = []
                 for uv in data:
@@ -564,8 +571,8 @@ class GLTF2USD:
                 prim_var = UsdGeom.PrimvarsAPI(mesh)
                 uv = prim_var.CreatePrimvar('primvars:st0', Sdf.ValueTypeNames.TexCoord2fArray, 'vertex')
                 uv.Set(invert_uvs)
-            if attribute == 'JOINTS_0':
-                self._convert_skin_to_usd_new(gltf_node, gltf_primitive, usd_node, mesh)
+            if attribute_name == 'JOINTS_0':
+                self._convert_skin_to_usd_new(gltf_node, gltf_primitive, parent_node, mesh)
         
         targets = gltf_primitive.get_morph_targets()
         weights = gltf_mesh.get_weights()
@@ -965,7 +972,27 @@ class GLTF2USD:
             self.stage.SetEndTimeCode(total_max_time)
             self.stage.SetTimeCodesPerSecond(self.fps)
 
-        #self._convert_skin_animations_to_usd()
+    def _convert_animation_to_usd_new(self, gltf_node, usd_node):
+        animations = self.gltf_loader.get_animations()
+
+        if len(animations) > 0:
+            # only use first animation for now
+            animation = animations[0]
+            animation_channels = animation.get_animation_channels_for_node(gltf_node)
+
+            if len(animation_channels) > 0:
+                total_max_time = -999
+                total_min_time = 999
+                for channel in animation_channels:
+                    min_max_time = self._create_usd_animation_new(usd_node, channel)
+                    total_max_time = max(total_max_time, min_max_time.max)
+                    total_min_time = min(total_min_time, min_max_time.min)
+
+                self.stage.SetStartTimeCode(total_min_time)
+                self.stage.SetEndTimeCode(total_max_time)
+                self.stage.SetTimeCodesPerSecond(self.fps)
+
+     
 
     def _convert_to_usd_friendly_node_name(self, name):
         """Format a glTF name to make it more USD friendly
@@ -1248,7 +1275,6 @@ class GLTF2USD:
         skeleton_animation = self._create_usd_skeleton_animation_new(gltf_skin, skeleton, usd_joint_names)
 
         parent_path = usd_node.GetPath()
-        gltf_skin = self.gltf_loader.json_data['skins'][gltf_node['skin']]
 
         bind_matrices = []
         rest_matrices = []
@@ -1259,8 +1285,8 @@ class GLTF2USD:
         skel_binding_api.CreateSkeletonRel().AddTarget(skeleton.GetPath())
         
         skel_binding_api.CreateAnimationSourceRel().AddTarget(skeleton_animation.GetPath())
-        bind_matrices = self._compute_bind_transforms(gltf_skin)
-        gltf_root_node_name = self._get_gltf_root_joint_name(gltf_skin)
+        bind_matrices = self._compute_bind_transforms_new(gltf_skin)
+        gltf_root_node_name = GLTF2USDUtils.convert_to_usd_friendly_node_name(gltf_skin.get_root_joint().get_name())
 
         primitive_attributes = gltf_primitive.get_attributes()
 
@@ -1298,6 +1324,25 @@ class GLTF2USD:
             for matrix in inverse_bind_matrices:
                 bind_matrix = self._convert_to_usd_matrix(matrix)
                 bind_matrices.append(bind_matrix.GetInverse())
+
+        return bind_matrices
+
+    def _compute_bind_transforms_new(self, gltf_skin):
+        """Compute the bind matrices from the skin
+
+        Arguments:
+            gltf_skin {Skin} -- glTF skin
+
+        Returns:
+            [list] -- List of bind matrices
+        """
+
+        bind_matrices = []
+        inverse_bind_matrices = gltf_skin.get_inverse_bind_matrices()
+
+        for matrix in inverse_bind_matrices:
+            bind_matrix = self._convert_to_usd_matrix(matrix)
+            bind_matrices.append(bind_matrix.GetInverse())
 
         return bind_matrices
 
@@ -1451,14 +1496,14 @@ class GLTF2USD:
         """
 
         sampler = animation_channel.get_sampler()
-        input_accessor = self.gltf_loader.json_data['accessors'][sampler['input']]
-        max_time = int(round(input_accessor['max'][0] * self.fps))
-        min_time = int(round(input_accessor['min'][0] * self.fps))
-        input_keyframes = self.gltf_loader.get_data(accessor=input_accessor)
-        output_accessor = self.gltf_loader.json_data['accessors'][sampler['output']]
-        output_keyframes = self.gltf_loader.get_data(accessor=output_accessor)
+        
+    
+        max_time = int(round(sampler.get_input_max()[0] * self.fps))
+        min_time = int(round(sampler.get_input_min()[0] * self.fps))
+        input_keyframes = sampler.get_input_data()
+        output_keyframes = sampler.get_output_data()
 
-        num_values = output_accessor['count'] / input_accessor['count']
+        num_values = sampler.get_output_count() / sampler.get_input_count()
         (transform, convert_func) = self._get_keyframe_conversion_func(usd_node, animation_channel)
 
         for i, keyframe in enumerate(input_keyframes):
@@ -1481,7 +1526,7 @@ class GLTF2USD:
             [func] -- USD animation conversion function
         """
 
-        path = animation_channel.path
+        path = animation_channel.get_target().get_path()
 
         def convert_translation(transform, time, output, i, _):
             value = output[i]

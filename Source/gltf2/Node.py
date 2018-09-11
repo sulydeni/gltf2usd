@@ -10,6 +10,8 @@ class Node:
         self._translation = node_dict['translation'] if ('translation' in node_dict) else [0,0,0]
         self._rotation = node_dict['rotation'] if ('rotation' in node_dict) else [0,0,0,1]     
         self._scale = node_dict['scale'] if ('scale' in node_dict) else [1,1,1]   
+        self._skin_index = node_dict['skin'] if ('skin' in node_dict) else None
+        self._skin = None
         
         self._mesh = gltf_loader.get_meshes()[node_dict['mesh']] if ('mesh' in node_dict) else None
         
@@ -42,3 +44,6 @@ class Node:
 
     def get_mesh(self):
         return self._mesh
+
+    def get_skin(self):
+        return self._skin

@@ -4,7 +4,7 @@ class Skin:
 
     def __init__(self, gltf2_loader, skin_entry):
         self._inverse_bind_matrices = self._init_inverse_bind_matrices(gltf2_loader, skin_entry)
-        self._joints = [gltf2_loader.nodes[joint_index] for joint_index in skin_entry['joints']]
+        self._joints = [gltf2_loader.get_nodes()[joint_index] for joint_index in skin_entry['joints']]
         self._root_skeleton = self._init_root_skeleton(gltf2_loader, skin_entry)
 
     def _init_inverse_bind_matrices(self, gltf2_loader, skin_entry):
