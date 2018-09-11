@@ -256,12 +256,15 @@ class GLTF2USD:
             double_sided {bool} -- specifies if the primitive is double sided
         """
         parent_node = usd_node
+        parent_path = parent_node.GetPath()
         attributes = gltf_primitive.get_attributes()
         skel_root = None
-        if 'JOINTS_0' in attributes:
+        targets = gltf_primitive.get_morph_targets()
+        if 'JOINTS_0' in attributes or len(targets) > 0:
             skeleton_path = '{0}/{1}'.format(usd_node.GetPath(),  'skeleton_root')
             skel_root = UsdSkel.Root.Define(self.stage, skeleton_path)
             parent_node = skel_root
+            parent_path = parent_node.GetPath()
         mesh = UsdGeom.Mesh.Define(self.stage, '{0}/{1}'.format(parent_node.GetPath(), GLTF2USDUtils.convert_to_usd_friendly_node_name(gltf_primitive.get_name())))
         mesh.CreateSubdivisionSchemeAttr().Set('none')
 
@@ -299,7 +302,6 @@ class GLTF2USD:
             if attribute_name == 'JOINTS_0':
                 self._convert_skin_to_usd(gltf_node, gltf_primitive, parent_node, mesh)
         
-        targets = gltf_primitive.get_morph_targets()
         weights = gltf_mesh.get_weights()
         if targets:
             skinBinding = UsdSkel.BindingAPI.Apply(mesh.GetPrim())

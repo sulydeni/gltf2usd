@@ -31,15 +31,20 @@ class PrimitiveAttribute:
 
 class PrimitiveTarget:
     def __init__(self, target_entry, target_index, gltf_loader):
+        self._name = None
         self._attributes = {}
         for entry in target_entry:
             accessor = gltf_loader.json_data['accessors'][target_entry[entry]]
-            name = accessor['name'] if ('name' in accessor) else 'shape_{}'.format(target_index)
+            if self._name == None:
+                self._name = accessor['name'] if ('name' in accessor) else 'shape_{}'.format(target_index)
             data = gltf_loader.get_data(accessor)
             self._attributes[entry] = data
 
     def get_attributes(self):
         return self._attributes
+
+    def get_name(self):
+        return self._name
 
 
 class Primitive:
@@ -67,7 +72,7 @@ class Primitive:
         # Fetch the names and accessors of the blendshapes
         if 'targets' in primitive_entry:
             for i, target_entry in enumerate(primitive_entry['targets']):
-                target = PrimitiveTarget(target_entry, gltf_loader, i)
+                target = PrimitiveTarget(target_entry, i, gltf_loader)
                 self._targets.append(target)
 
     def _get_indices(self, primitive_entry, gltf_loader):
