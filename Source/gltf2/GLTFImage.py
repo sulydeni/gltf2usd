@@ -45,7 +45,8 @@ class GLTFImage(object):
         elif channels == ImageColorChannels.RGBA:
             img = original_img.convert('RGBA')
         elif channels == ImageColorChannels.R or channels == ImageColorChannels.G or channels == ImageColorChannels.B or channels == ImageColorChannels.A:
-            img = img.getchannel(channels.value)
+            if img.mode != 'L':
+                img = img.getchannel(channels.value)
 
         else:
             raise Exception('Unsupported image channel format {}'.format(channels))
