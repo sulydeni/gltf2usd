@@ -3,6 +3,7 @@ import json
 import os
 import struct
 import base64
+import re
 
 import gltf2usdUtils
 
@@ -239,7 +240,7 @@ class GLTF2Loader:
         uri = buffer['uri']
         buffer_data = ''
 
-        if uri.startswith('data:application/octet-stream;base64,'):
+        if re.match(r'^data:.*?;base64,', uri):
             uri_data = uri.split(',')[1]
             buffer_data = base64.b64decode(uri_data)
             if 'byteOffset' in bufferview:
