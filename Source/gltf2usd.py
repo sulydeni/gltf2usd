@@ -133,57 +133,59 @@ class GLTF2USD:
   
     def _create_usd_skeleton_animation(self, gltf_skin, usd_skeleton, joint_names):
         #get the animation data per joint
-        skelAnim = UsdSkel.Animation.Define(self.stage, '{0}/{1}'.format(usd_skeleton.GetPath(), 'anim'))
+        skelAnim = None
+        gltf_animations = self.gltf_loader.get_animations()
 
-        usd_skel_root_path = usd_skeleton.GetPath().GetParentPath()
-        usd_skel_root = self.stage.GetPrimAtPath(usd_skel_root_path)
+        if len(gltf_animations):
+            skelAnim = UsdSkel.Animation.Define(self.stage, '{0}/{1}'.format(usd_skeleton.GetPath(), 'anim'))
 
+            usd_skel_root_path = usd_skeleton.GetPath().GetParentPath()
+            usd_skel_root = self.stage.GetPrimAtPath(usd_skel_root_path)
 
-        skelAnim.CreateJointsAttr().Set(joint_names)
+            skelAnim.CreateJointsAttr().Set(joint_names)
+            gltf_animation = self.gltf_loader.get_animations()[0]
+            min_sample = 999
+            max_sample = -999
+            for sampler in gltf_animation.get_samplers():
+                input_data = sampler.get_input_data()
+                min_sample = min(min_sample, input_data[0])
+                max_sample = max(max_sample, input_data[-1])
 
-        gltf_animation = self.gltf_loader.get_animations()[0]
-        min_sample = 999
-        max_sample = -999
-        for sampler in gltf_animation.get_samplers():
-            input_data = sampler.get_input_data()
-            min_sample = min(min_sample, input_data[0])
-            max_sample = max(max_sample, input_data[-1])
+            rotate_attr = skelAnim.CreateRotationsAttr()
+            for input_key in numpy.arange(min_sample, max_sample, 1./self.fps):
+                entries = []
+                for joint in gltf_skin.get_joints():
+                    anim = self._get_anim_data_for_joint_and_path(gltf_animation, joint, 'rotation', input_key)
+                    entries.append(anim)
 
-        rotate_attr = skelAnim.CreateRotationsAttr()
-        for input_key in numpy.arange(min_sample, max_sample, 1./self.fps):
-            entries = []
-            for joint in gltf_skin.get_joints():
-                anim = self._get_anim_data_for_joint_and_path(gltf_animation, joint, 'rotation', input_key)
-                entries.append(anim)
+                if len(gltf_skin.get_joints()) != len(entries):
+                    raise Exception('up oh!')
 
-            if len(gltf_skin.get_joints()) != len(entries):
-                raise Exception('up oh!')
+                rotate_attr.Set(Vt.QuatfArray(entries), Usd.TimeCode(input_key * self.fps))
 
-            rotate_attr.Set(Vt.QuatfArray(entries), Usd.TimeCode(input_key * self.fps))
+            translate_attr = skelAnim.CreateTranslationsAttr()
+            for input_key in numpy.arange(min_sample, max_sample, 1./self.fps):
+                entries = []
+                for joint in gltf_skin.get_joints():
+                    anim = self._get_anim_data_for_joint_and_path(gltf_animation, joint, 'translation', input_key)
+                    entries.append(anim)
 
-        translate_attr = skelAnim.CreateTranslationsAttr()
-        for input_key in numpy.arange(min_sample, max_sample, 1./self.fps):
-            entries = []
-            for joint in gltf_skin.get_joints():
-                anim = self._get_anim_data_for_joint_and_path(gltf_animation, joint, 'translation', input_key)
-                entries.append(anim)
+                if len(gltf_skin.get_joints()) != len(entries):
+                    raise Exception('up oh!')
 
-            if len(gltf_skin.get_joints()) != len(entries):
-                raise Exception('up oh!')
+                translate_attr.Set(entries, Usd.TimeCode(input_key * self.fps))
 
-            translate_attr.Set(entries, Usd.TimeCode(input_key * self.fps))
+            scale_attr = skelAnim.CreateScalesAttr()
+            for input_key in numpy.arange(min_sample, max_sample, 1./self.fps):
+                entries = []
+                for joint in gltf_skin.get_joints():
+                    anim = self._get_anim_data_for_joint_and_path(gltf_animation, joint, 'scale', input_key)
+                    entries.append(anim)
 
-        scale_attr = skelAnim.CreateScalesAttr()
-        for input_key in numpy.arange(min_sample, max_sample, 1./self.fps):
-            entries = []
-            for joint in gltf_skin.get_joints():
-                anim = self._get_anim_data_for_joint_and_path(gltf_animation, joint, 'scale', input_key)
-                entries.append(anim)
+                if len(gltf_skin.get_joints()) != len(entries):
+                    raise Exception('up oh!')
 
-            if len(gltf_skin.get_joints()) != len(entries):
-                raise Exception('up oh!')
-
-            scale_attr.Set(entries, Usd.TimeCode(input_key * self.fps))
+                scale_attr.Set(entries, Usd.TimeCode(input_key * self.fps))
 
         return skelAnim
 
@@ -462,8 +464,9 @@ class GLTF2USD:
         skel_binding_api = UsdSkel.BindingAPI(usd_mesh)
         skel_binding_api.CreateGeomBindTransformAttr(Gf.Matrix4d(((1,0,0,0),(0,1,0,0),(0,0,1,0),(0,0,0,1))))
         skel_binding_api.CreateSkeletonRel().AddTarget(skeleton.GetPath())
+        if skeleton_animation:
+            skel_binding_api.CreateAnimationSourceRel().AddTarget(skeleton_animation.GetPath())
         
-        skel_binding_api.CreateAnimationSourceRel().AddTarget(skeleton_animation.GetPath())
         bind_matrices = self._compute_bind_transforms(gltf_skin)
         gltf_root_node_name = GLTF2USDUtils.convert_to_usd_friendly_node_name(gltf_skin.get_root_joint().get_name())
 
@@ -567,16 +570,17 @@ class GLTF2USD:
         sampler = animation_channel.get_sampler()
         
     
-        max_time = int(round(sampler.get_input_max()[0] * self.fps))
-        min_time = int(round(sampler.get_input_min()[0] * self.fps))
+        max_time = int(round(sampler.get_input_max()[0] ))
+        min_time = int(round(sampler.get_input_min()[0] ))
         input_keyframes = sampler.get_input_data()
         output_keyframes = sampler.get_output_data()
 
         num_values = sampler.get_output_count() / sampler.get_input_count()
         (transform, convert_func) = self._get_keyframe_conversion_func(usd_node, animation_channel)
 
-        for i, keyframe in enumerate(input_keyframes):
-            convert_func(transform, int(round(keyframe * self.fps)), output_keyframes, i, num_values)
+        for i, keyframe in enumerate(numpy.arange(min_time, max_time, 1./self.fps)):
+        #for i, keyframe in enumerate(input_keyframes):
+            convert_func(transform, keyframe, output_keyframes, i, num_values)
 
         MinMaxTime = collections.namedtuple('MinMaxTime', ('max', 'min'))
         return MinMaxTime(max=max_time, min=min_time)
@@ -596,30 +600,32 @@ class GLTF2USD:
         """
 
         path = animation_channel.get_target().get_path()
+        animation_sampler = animation_channel.get_sampler()
 
         def convert_translation(transform, time, output, i, _):
-            value = output[i]
-            transform.Set(time=time, value=(value[0], value[1], value[2]))
+            value = animation_sampler.get_interpolated_output_data(time)
+            transform.Set(time=time * self.fps, value=(value[0], value[1], value[2]))
 
         def convert_scale(transform, time, output, i, _):
-            value = output[i]
-            transform.Set(time=time, value=(value[0], value[1], value[2]))
+            value = animation_sampler.get_interpolated_output_data(time)
+            transform.Set(time=time * self.fps, value=(value[0], value[1], value[2]))
 
         def convert_rotation(transform, time, output, i, _):
-            value = output[i]
-            transform.Set(time=time, value=Gf.Quatf(value[3], value[0], value[1], value[2]))
+            value = animation_sampler.get_interpolated_output_data(time)
+            rotation = Gf.Rotation(value).Decompose((1,0,0), (0,1,0), (0,0,1))
+            transform.Set(time=time * self.fps, value=rotation)
 
         def convert_weights(transform, time, output, i, values_per_step):
             start = i * values_per_step
             end = start + values_per_step
             values = output[start:end]
             value = list(map(lambda x: round(x, 5) + 0, values))
-            transform.Set(time=time, value=value)
+            transform.Set(time=time * self.fps, value=value)
 
         if path == 'translation':
             return (usd_node.AddTranslateOp(opSuffix='translate'), convert_translation)
         elif path == 'rotation':
-            return (usd_node.AddOrientOp(opSuffix='rotate'), convert_rotation)
+            return (usd_node.AddRotateXYZOp(opSuffix='rotate'), convert_rotation)
         elif path == 'scale':
             return (usd_node.AddScaleOp(opSuffix='scale'), convert_scale)
         elif path == 'weights':
