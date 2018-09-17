@@ -79,10 +79,15 @@ class AnimationSampler:
             right_output_sample = output_data[closest_pos]
 
             factor = float(input_sample - input_data[closest_pos-1])/(input_data[closest_pos] - input_data[closest_pos - 1])
+            if self._interpolation == 'LINEAR':
+                return self._linear_interpolate_values(left_output_sample, right_output_sample, factor)
+            elif self._interpolation == 'STEP':
+                return self._step_interpolate_values(left_output_sample, right_output_sample, factor)
+            else:
+                print('cubic spline interpolation not yet implemented!  Defaulting to linear for now...')
+                return self._linear_interpolate_values(left_output_sample, right_output_sample, factor)
 
-            return self._interpolate_values(left_output_sample, right_output_sample, factor)
-
-    def _interpolate_values(self, value0, value1, factor):
+    def _linear_interpolate_values(self, value0, value1, factor):
         if len(value0) == 3:
             one_minus_factor = 1 - factor
             #translation or scale interpolation
@@ -96,6 +101,17 @@ class AnimationSampler:
             #quaternion interpolation
             result = GLTF2USDUtils.slerp(value0, value1, factor)
             return result
+        else:
+            raise Exception('unsupported value type')
+
+    def _step_interpolate_values(self, value0, value1, factor):
+        if len(value0) == 3:
+            #translation or scale interpolation
+            return value0
+
+        elif len(value0) == 4:
+            #quaternion interpolation
+            return Gf.Quatf(value0[3], value0[0], value0[1], value0[2])
         else:
             raise Exception('unsupported value type')
             

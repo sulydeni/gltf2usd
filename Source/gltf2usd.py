@@ -19,6 +19,7 @@ from pxr import Usd, UsdGeom, Sdf, UsdShade, Gf, UsdSkel, Vt, Ar, UsdUtils
 
 from gltf2loader import GLTF2Loader, PrimitiveMode, TextureWrap, MinFilter, MagFilter
 from gltf2usdUtils import GLTF2USDUtils
+from usd_material import USDMaterial
 
 class GLTF2USD:
     """
@@ -51,7 +52,7 @@ class GLTF2USD:
         self.verbose = verbose
         self.scale = scale
 
-        self.output_dir = os.path.dirname(usd_file)
+        self.output_dir = os.path.dirname(os.path.abspath(usd_file))
         filename = '%s.%s' % (os.path.splitext(usd_file)[0], 'usda')
 
         #if usdz file is desired, change to usdc file
@@ -274,7 +275,7 @@ class GLTF2USD:
                 mesh.CreateDoubleSidedAttr().Set(True)
 
             usd_material = self.usd_materials[material.get_index()]
-            UsdShade.MaterialBindingAPI(mesh).Bind(usd_material)
+            UsdShade.MaterialBindingAPI(mesh).Bind(usd_material.get_usd_material())
 
         for attribute_name in attributes:
             attribute = attributes[attribute_name]
@@ -679,6 +680,20 @@ class GLTF2USD:
                         bias = (1.0, 1.0, 1.0, 1.0)
                     )
 
+    def _convert_materials_to_preview_surface_new(self):
+        """
+        Converts the glTF materials to preview surfaces
+        """
+        self.usd_materials = []
+        material_path_root = '/Materials'
+        scope = UsdGeom.Scope.Define(self.stage, material_path_root)
+
+        for i, material in enumerate(self.gltf_loader.get_materials()):
+            usd_material = USDMaterial(self.stage, scope, i, self.gltf_loader)
+            usd_material.convert_material_to_usd_preview_surface(material, self.output_dir)
+            self.usd_materials.append(usd_material)
+
+
     def _convert_animation_to_usd(self, gltf_node, usd_node):
         animations = self.gltf_loader.get_animations()
 
@@ -929,6 +944,45 @@ class GLTF2USD:
 
         return texture_name
 
+    def convert_metallic_roughness_texture_to_usd(self, metallic_roughness_texture):
+        image_path = metallic_roughness_texture.get_image_path()
+        image_base_name = ntpath.basename(image_path)
+        texture_name = image_base_name
+        img = Image.open(image_path)
+        if img.mode == 'P':
+            img = img.convert('RGB')
+
+        _, metallic, roughness = img.split()
+        roughness_texture_name = 'Roughness_{}'.format(image_base_name)
+        roughness.save(os.path.join(self.output_dir, texture_name))
+
+        metallic_texture_name = 'Metallic_{}'.format(image_base_name)
+        metallic.save(os.path.join(self.output_dir, texture_name))
+
+        return {'roughness': roughness_texture_name, 'metallic': metallic_texture_name}
+
+    def convert_specular_glossiness_texture_to_usd(self, specular_glossiness_texture):
+        image_path = specular_glossiness_texture.get_image_path()
+        image_base_name = ntpath.basename(image_path)
+        texture_name = image_base_name
+        img = Image.open(image_path)
+        specular_texture_name = os.path.join(self.output_dir, 'Specular_{}'.format(image_base_name))
+        glossiness_texture_name = os.path.join(self.output_dir, 'Glossiness_{}'.format(image_base_name))
+        if img.mode == 'P':
+            #convert paletted image to RGBA
+            img = img.convert('RGBA')
+        
+        #get specular
+        img.convert('RGB').save(specular_texture_name)
+        #get glossiness
+        img.getchannel('A').save(glossiness_texture_name)
+        #channels[3].save(glossiness_texture_name)
+        
+
+        return {'specular': specular_texture_name, 'glossiness': glossiness_texture_name}
+
+
+
     def create_metallic_roughness_to_grayscale_images(self, image):
         image_base_name = ntpath.basename(image)
         roughness_texture_name = os.path.join(self.output_dir, 'Roughness_{}'.format(image_base_name))
@@ -1008,7 +1062,7 @@ class GLTF2USD:
     def convert(self):
         if hasattr(self, 'gltf_loader'):
             self._convert_images_to_usd()
-            self._convert_materials_to_preview_surface()
+            self._convert_materials_to_preview_surface_new()
             self.convert_nodes_to_xform()
 
 def check_usd_compliance(rootLayer, arkit=False):

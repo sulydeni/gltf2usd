@@ -6,7 +6,7 @@ import base64
 
 import gltf2usdUtils
 
-from gltf2 import Skin, Node, Animation, Scene, Mesh, Material
+from gltf2 import Skin, Node, Animation, Scene, Mesh, Material, GLTFImage
 
 class AccessorType(Enum):
     SCALAR = 'SCALAR'
@@ -114,6 +114,7 @@ class GLTF2Loader:
     def _initialize(self):
         """Initializes the glTF loader
         """
+        self._initialize_images()
         self._initialize_materials()
         self._initialize_meshes()
         self._initialize_nodes()
@@ -121,6 +122,13 @@ class GLTF2Loader:
         self._initialize_scenes()
         
         self._initialize_animations()
+
+    def _initialize_images(self):
+        self._images = []
+        if 'images' in self.json_data:
+            for i, image_entry in enumerate(self.json_data['images']):
+                self._images.append(GLTFImage.GLTFImage(image_entry, i, self))
+
 
     def _initialize_nodes(self):
         self.nodes = []
@@ -157,6 +165,9 @@ class GLTF2Loader:
                 self._main_scene = self._scenes[self.json_data['scene']]
             else:
                 self._main_scene = self._scenes[0]
+
+    def get_images(self):
+        return self._images
 
     def get_scenes(self):
         """Get the scene objects from the glTF file
