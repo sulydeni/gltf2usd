@@ -33,7 +33,7 @@ class GLTF2USD:
         TextureWrap.REPEAT: 'repeat',
     }
 
-    def __init__(self, gltf_file, usd_file, fps, scale, verbose=False):
+    def __init__(self, gltf_file, usd_file, fps, scale, verbose=False, use_euler_rotation=False):
         """Initializes the glTF to USD converter
 
         Arguments:
@@ -51,6 +51,7 @@ class GLTF2USD:
         self.gltf_loader = GLTF2Loader(gltf_file)
         self.verbose = verbose
         self.scale = scale
+        self.use_euler_rotation = use_euler_rotation
 
         self.output_dir = os.path.dirname(os.path.abspath(usd_file))
         filename = '%s.%s' % (os.path.splitext(usd_file)[0], 'usda')
@@ -612,8 +613,9 @@ class GLTF2USD:
 
         def convert_rotation(transform, time, output, i, _):
             value = animation_sampler.get_interpolated_output_data(time)
-            rotation = Gf.Rotation(value).Decompose((1,0,0), (0,1,0), (0,0,1))
-            transform.Set(time=time * self.fps, value=rotation)
+            if self.use_euler_rotation:
+                value = Gf.Rotation(value).Decompose((1,0,0), (0,1,0), (0,0,1))
+            transform.Set(time=time * self.fps, value=value)
 
         def convert_weights(transform, time, output, i, values_per_step):
             start = i * values_per_step
@@ -625,7 +627,10 @@ class GLTF2USD:
         if path == 'translation':
             return (usd_node.AddTranslateOp(opSuffix='translate'), convert_translation)
         elif path == 'rotation':
-            return (usd_node.AddRotateXYZOp(opSuffix='rotate'), convert_rotation)
+            if self.use_euler_rotation:
+                return (usd_node.AddRotateXYZOp(opSuffix='rotate'), convert_rotation)
+            else:
+                return (usd_node.AddOrientOp(opSuffix='rotate'), convert_rotation)
         elif path == 'scale':
             return (usd_node.AddScaleOp(opSuffix='scale'), convert_scale)
         elif path == 'weights':
@@ -651,7 +656,7 @@ def check_usd_compliance(rootLayer, arkit=False):
     return len(errors) == 0 and len(failedChecks) == 0
 
 
-def convert_to_usd(gltf_file, usd_file, fps, scale, arkit=False, verbose=False):
+def convert_to_usd(gltf_file, usd_file, fps, scale, arkit=False, verbose=False, use_euler_rotation=False):
     """Converts a glTF file to USD
 
     Arguments:
@@ -662,7 +667,7 @@ def convert_to_usd(gltf_file, usd_file, fps, scale, arkit=False, verbose=False):
         verbose {bool} -- [description] (default: {False})
     """
 
-    usd = GLTF2USD(gltf_file=gltf_file, usd_file=usd_file, fps=fps, scale=scale, verbose=verbose)
+    usd = GLTF2USD(gltf_file=gltf_file, usd_file=usd_file, fps=fps, scale=scale, verbose=verbose, use_euler_rotation=use_euler_rotation)
     if usd.stage:
         asset = usd.stage.GetRootLayer()
         usd.logger.info('Conversion complete!')
@@ -706,7 +711,8 @@ if __name__ == '__main__':
     parser.add_argument('--verbose', '-v', action='store_true', dest='verbose', help='Enable verbose mode')
     parser.add_argument('--scale', '-s', action='store', dest='scale', help='Scale the resulting USDA', type=float, default=100)
     parser.add_argument('--arkit', action='store_true', dest='arkit', help='Check USD with ARKit compatibility before making USDZ file')
+    parser.add_argument('--use-euler-rotation', action='store_true', dest='use_euler_rotation', help='sets euler rotations for node animations instead of quaternion rotations')
     args = parser.parse_args()
 
     if args.gltf_file:
-        convert_to_usd(args.gltf_file, args.usd_file, args.fps, args.scale, args.arkit, args.verbose)
+        convert_to_usd(args.gltf_file, args.usd_file, args.fps, args.scale, args.arkit, args.verbose, args.use_euler_rotation)
